@@ -1,0 +1,48 @@
+[app]
+name = "storefront"
+# Shoppers browse and buy without a floo account, and Stripe's webhook carries no floo
+# credential, so the store is public in every environment. [[routes]] applies to all of
+# them; dev uses Stripe test mode. To keep dev private, see "Private dev" in README.md.
+access_mode = "public"
+
+[[routes]]
+path = "/"
+access = "public"
+service = "web"
+
+# The agent API: app API keys holding the "api" scope (floo apps keys create ...
+# --scope api), or an app member's own floo key. Renaming the scope after the first
+# deploy is refused on push.
+[[routes]]
+path = "/api"
+access = "api_key"
+scope = "api"
+service = "web"
+
+[services.web]
+type = "web"
+path = "."
+port = 3000
+# Runs once per deploy before traffic moves; a failure stops the deploy and the
+# previous revision keeps serving. floo dev runs it before starting the app.
+migrate_command = "node_modules/.bin/tsx scripts/migrate.ts"
+dev_command = "npm run dev"
+# 0 bills only while serving requests. A webhook to a service scaled to zero waits for
+# a cold start; set min_instances = 1 under [environments.prod.resources] to keep prod
+# ready, billed while idle. https://getfloo.com/docs/guides/cold-starts
+min_instances = 0
+
+[services.web.env]
+managed = ["postgres"]
+required = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"]
+
+# Only the default Postgres resource injects the unsuffixed DATABASE_URL.
+[managed.default]
+type = "postgres"
+
+# Shopper sign-up and sign-in (User accounts). floo serves it at /api/auth on every
+# host of the app and keeps users in this database's floo_auth schema. Dev and prod
+# have separate users. https://getfloo.com/docs/guides/user-accounts
+[managed.default.users]
+methods = ["email_password"]
+signup = "open"
